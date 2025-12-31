@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 class WindowsFirewall:
     def __init__(self):
 
-        GROUP_NAME = "CodeforcesLockdown"
+        self.GROUP_NAME = "CodeforcesLockdown"
 
         self.is_active = False
         self.rules = {}
