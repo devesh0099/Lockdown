@@ -26,6 +26,42 @@ def signal_handler(signum, frame):
     cleanup()
     sys.exit(0)
 
+def test_dns_lockdown():
+    global firewall
+    
+    print("CODEFORCES LOCKDOWN - DNS INTERCEPTION TEST")
+    
+    if not is_admin():
+        logger.error("Run as Administrator")
+        return False
+    
+    firewall = FirewallManager()
+    
+    print("\nEnabling lockdown with DNS filtering...")
+    if not firewall.enable_lockdown():
+        return False
+    
+    print("\nLockdown + DNS interception active!")
+    print("\nTEST 1: Try opening codeforces.com in your browser")
+    print("Expected: Should work (DNS resolves, IP whitelisted)")
+    
+    input("\n⏸Press Enter after testing Codeforces...")
+    
+    print("\nTEST 2: Try opening google.com")
+    print("Expected: Should fail (DNS blocked)")
+    
+    input("\n⏸Press Enter after testing Google...")
+    
+    print("\nCurrently whitelisted IPs:")
+    for ip in firewall.get_whitelisted_ips():
+        print(f"   - {ip}")
+    
+    input("\nPress Enter to restore system...")
+    
+    cleanup()
+    print("\nTEST COMPLETE - System restored\n")
+    return True
+
 def test_lockdown():
     global firewall
     
@@ -81,9 +117,9 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     
     try:
-        test_lockdown()
+        test_dns_lockdown()
     except Exception as e:
-        logger.exception(f"💥 Fatal error: {e}")
+        logger.exception(f"Fatal error: {e}")
         cleanup()
         sys.exit(1)
 
