@@ -100,7 +100,7 @@ class WindowsState:
                 'netsh advfirewall firewall delete rule name=all dir=out',
                 shell=True,
                 capture_output=True,
-                stderr=subprocess.DEVNULL
+                text=True
             )
             
             for prefix in ["CodeforcesLockdown_", "CodeforcesLockdown"]:
@@ -109,6 +109,7 @@ class WindowsState:
                         f'powershell -Command "Remove-NetFirewallRule -DisplayName \'{prefix}*\' -ErrorAction SilentlyContinue"',
                         shell=True,
                         capture_output=True,
+                        text=True,
                         timeout=5
                     )
                 except Exception:

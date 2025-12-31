@@ -55,7 +55,7 @@ class WindowsFirewall:
             rule_name = f"{self.GROUP_NAME}_{ip.replace('.','_')}_{port}_{protocol.upper()}"
 
             self._run_netsh(
-                f'advfirewall firewall add rule'
+                f'advfirewall firewall add rule '
                 f'name="{rule_name}" '
                 f'dir=out '
                 f'action=allow '
