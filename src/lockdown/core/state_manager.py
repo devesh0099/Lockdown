@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class StateManager:
     SNAPSHOT_DIR = Path.home() / ".lockdown"
-    SNAPSHORT_FILE = SNAPSHOT_DIR / "state.json"
+    SNAPSHOT_FILE = SNAPSHOT_DIR / "state.json"
 
     def __init__(self):
         self.backend = WindowsState()
