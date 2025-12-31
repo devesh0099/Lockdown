@@ -38,6 +38,23 @@ class WindowsFirewall:
             self.rules[rule_name] = {"type": "loopback", "ip": "127.0.0.1"}
             logger.info("Allowed loopback")
 
+            # Allow DNS query for local DNS
+            upstream_dns_servers = ["8.8.8.8", "1.1.1.1", "208.67.222.222"]
+            for dns_ip in upstream_dns_servers:
+                rule_name_dns = f"{self.GROUP_NAME}_DNS_{dns_ip.replace('.', '_')}"
+                self._run_netsh(
+                    f'advfirewall firewall add rule '
+                    f'name="{rule_name_dns}" '
+                    f'dir=out '
+                    f'action=allow '
+                    f'protocol=UDP '
+                    f'remoteip={dns_ip} '
+                    f'remoteport=53 '
+                    f'profile=any'
+                )
+                self.rules[rule_name_dns] = {"type": "upstream_dns", "ip": dns_ip, "port": 53}
+                logger.info(f"✓ Allowed DNS queries to {dns_ip}")
+
             self.is_active = True
             logger.info("Firewall Activated")
             return True

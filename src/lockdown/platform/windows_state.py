@@ -30,25 +30,18 @@ class WindowsState:
                        )
         if result.returncode != 0:
             logger.error(f"Failed to restore policy: {result.stderr}")
-            logger.warning("Attempting to force allow policy...")
-        
-            subprocess.run(
-                "netsh advfirewall set allprofiles firewallpolicy blockinbound,allowoutbound",
-                shell=True,
-                capture_output=True
-            )
-            logger.info("Forced allowoutbound policy")
-        else:
-            logger.info(f"Restored firewall policy: {original_policy}")
+            return False
+        logger.info("Restored firewall policy: allowinbound,allowoutbound")
 
         current_policy = self._get_firewall_policy()
         logger.info(f"Current policy after restore: {current_policy}")
             
         if "block" in current_policy.lower() and "outbound" in current_policy.lower():
-            logger.warning("⚠️  Outbound traffic is still blocked!")
-            logger.warning("   Manually run: netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound")
+            logger.warning("Outbound traffic is still blocked!")
+            logger.warning("Manually run: netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound")
+            return False
 
-        firewall_state = state.get("firewall_state", {}).get("enabled", True)
+        firewall_state = state.get("firewall_state","enabled",True)
         if not firewall_state.get("enabled", True):
             subprocess.run(
                 "netsh advfirewall set allprofiles state off",
@@ -60,7 +53,7 @@ class WindowsState:
         return True
 
 
-    def _get_firewall_state(self) -> dict:
+    def _get_firewall_state(self) -> bool:
         try:
             result = subprocess.run(
                 "netsh advfirewall show allprofiles state",
@@ -77,7 +70,7 @@ class WindowsState:
             
         except Exception as e:
             logger.warning(f"Could not determine firewall state: {e}")
-            return {"enabled": True} 
+            return True 
     
     def _get_firewall_policy(self) -> str:
         try:
