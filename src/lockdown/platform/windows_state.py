@@ -37,6 +37,7 @@ class WindowsState:
             )
         
         logger.info("Previous Firewall Satte recovery successful.")
+        return True
 
 
     def _get_firewall_state(self) -> dict:
