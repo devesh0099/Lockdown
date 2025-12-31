@@ -84,10 +84,20 @@ class FirewallManager:
     
     def get_whitelisted_ips(self) -> list:
         rules = self.backend.get_active_rules()
-        return [
-            f"{r['ip']}:{r['port']}/{r['protocol']}"
-            for r in rules
-        ]
+        result = []
+        
+        for r in rules:
+            if r.get('type') in ['loopback', 'upstream_dns']:
+                continue
+            
+            ip = r.get('ip', 'unknown')
+            port = r.get('port', '?')
+            protocol = r.get('protocol', 'TCP')
+            
+            result.append(f"{ip}:{port}/{protocol}")
+        
+        return result
+
     
     def status(self) -> dict:
         return {

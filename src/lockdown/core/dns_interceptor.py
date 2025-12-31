@@ -66,7 +66,11 @@ class DNSInterceptor:
                     args=(data, client_addr),
                     daemon=True
                 ).start()
-                
+            except OSError as e:
+                if e.winerror == 10054:
+                    continue
+                if self.running:
+                    logger.error(f"Error in DNS listener: {e}")
             except Exception as e:
                 if self.running:
                     logger.error(f"Error in DNS listener: {e}")
