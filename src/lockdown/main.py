@@ -1,0 +1,96 @@
+import logging
+import sys
+import signal
+import atexit
+from lockdown.core.firewall_manager import FirewallManager
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
+firewall = None
+
+def cleanup():
+    if firewall and firewall.backend.is_active:
+        logger.info("\n🔧 Cleaning up...")
+        firewall.disable_lockdown()
+
+def signal_handler(signum, frame):
+    logger.info("\nInterrupt received")
+    cleanup()
+    sys.exit(0)
+
+def test_lockdown():
+    global firewall
+    
+    print("LOCKDOWN - TEST MODE")
+    
+    if not is_admin():
+        logger.error("This program requires Administrator privileges")
+        logger.error("Right-click and select 'Run as Administrator'")
+        return False
+    
+    firewall = FirewallManager()
+    
+    print("\nStep 1: Enabling lockdown...")
+    if not firewall.enable_lockdown():
+        logger.error("Failed to enable lockdown")
+        return False
+    
+    print("\nLockdown enabled!")
+    print("\nTEST: Try opening any website in your browser")
+    print("Expected: Connection should timeout/fail")
+    
+    input("\n ⏸Press Enter after testing (websites should be blocked)...")
+    
+    print("\nStep 2: Whitelisting 8.8.8.8:443 (Google DNS)...")
+    firewall.allow_ip("8.8.8.8", port=443, protocol="tcp")
+    
+    print("\nIP whitelisted!")
+    print("\nTEST: Try this command in PowerShell:")
+    print("Test-NetConnection -ComputerName 8.8.8.8 -Port 443")
+    print("Expected: Connection should succeed")
+    
+    input("\n⏸Press Enter to disable lockdown and restore system...")
+    
+    print("\n📍 Step 3: Restoring system...")
+    cleanup()
+    
+    print("\n" + "=" * 60)
+    print("✅ TEST COMPLETE")
+    print("=" * 60)
+    print("\n💡 Your system has been restored to its original state")
+    print("   You can verify by opening any website\n")
+    
+    return True
+
+
+def is_admin():
+    try:
+        import ctypes
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except Exception:
+        return False
+
+
+def main():
+    atexit.register(cleanup)
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    try:
+        test_lockdown()
+    except Exception as e:
+        logger.exception(f"💥 Fatal error: {e}")
+        cleanup()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
