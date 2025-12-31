@@ -28,7 +28,7 @@ class WindowsFirewall:
             # Allowed loopback
             rule_name = f"{self.GROUP_NAME}_Loopback"
             self._run_netsh(
-                f'advfirewall firewall add rule'
+                f'advfirewall firewall add rule '
                 f'name="{rule_name}" '
                 f'dir=out '
                 f'action=allow '
