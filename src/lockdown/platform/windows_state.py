@@ -32,7 +32,6 @@ class WindowsState:
             for line in output.splitlines():
                 line = line.strip().lower()
                 
-                # Check for policy line
                 if 'firewall policy' in line or 'policy' in line:
                     if 'blockinbound' in line:
                         inbound_blocked = True
@@ -43,6 +42,7 @@ class WindowsState:
                         outbound_blocked = True
                     if 'allowoutbound' in line:
                         outbound_blocked = False
+            
             inbound = "block" if inbound_blocked else "allow"
             outbound = "block" if outbound_blocked else "allow"
             
@@ -52,8 +52,7 @@ class WindowsState:
                     
         except Exception as e:
             logger.warning(f"Could not determine firewall policy: {e}")
-            return "allowinbound,allowoutbound" 
-
+            return "allowinbound,allowoutbound"
 
     def restore(self, state: dict) -> bool:
         try:
@@ -82,15 +81,15 @@ class WindowsState:
                 logger.info(f"Verification: Current policy is now: {current_policy}")
                 
                 if "allow" in current_policy and "outbound" in current_policy:
-                    logger.info("✓ Firewall policy successfully restored")
+                    logger.info("Firewall policy successfully restored")
                     break
                 else:
                     logger.warning(f"Attempt {attempt+1}: Policy not applied correctly, retrying...")
             else:
                 logger.error("Failed to restore policy after 3 attempts")
                 logger.error("MANUAL FIX REQUIRED:")
-                logger.error("Open PowerShell as Admin and run:")
-                logger.error("netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound")
+                logger.error("  Open PowerShell as Admin and run:")
+                logger.error("  netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound")
                 return False
             
             firewall_state = state.get("firewall_enabled", {})
@@ -114,13 +113,13 @@ class WindowsState:
         except Exception as e:
             logger.error(f"Failed to restore state: {e}")
             logger.error("MANUAL FIX REQUIRED:")
-            logger.error("  netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound")
+            logger.error("netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound")
             return False
-    
-    def _get_firewall_policy(self) -> str:
+
+    def _get_firewall_state(self) -> bool:
         try:
             result = subprocess.run(
-                "netsh advfirewall show allprofiles",
+                "netsh advfirewall show allprofiles state",
                 shell=True,
                 capture_output=True,
                 text=True,
@@ -128,15 +127,13 @@ class WindowsState:
             )
             
             output = result.stdout.upper()
-
-            if "OUTBOUND" in output and "BLOCK" in output:
-                return "blockinbound,blockoutbound"
-            else:
-                return "allowinbound,allowoutbound"
-                
+            enabled = "ON" in output or "STATE" in output
+            
+            return {"enabled": enabled}
+            
         except Exception as e:
-            logger.warning(f"Could not determine firewall policy: {e}")
-            return "allowinbound,allowoutbound"
+            logger.warning(f"Could not determine firewall state: {e}")
+            return True 
     
     def _count_existing_rules(self) -> int:
         try:
