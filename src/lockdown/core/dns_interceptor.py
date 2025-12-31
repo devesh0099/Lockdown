@@ -7,14 +7,14 @@ from core.dns_resolver import DNSResolver
 
 logger = logging.getLogger(__name__)
 
-BIND_IP = "127.0.0.1"
-BIND_PORT = 53
 
 class DNSInterceptor:
     def __init__(self, whitelist_patterns: list, on_ip_resolved: Optional[Callable] = None):
         self.whitelist_patterns = [re.compile(pattern) for pattern in whitelist_patterns]
         self.on_ip_resolved = on_ip_resolved
         self.resolver = DNSResolver()
+        self.BIND_IP = "127.0.0.1"
+        self.BIND_PORT = 53
 
         self.sock = None
         self.running = False
@@ -23,12 +23,12 @@ class DNSInterceptor:
     def start(self) -> bool:
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.sock.bind((BIND_IP, self.BIND_PORT))
+            self.sock.bind((self.BIND_IP, self.BIND_PORT))
             self.running = True
             self.thread = threading.Thread(target=self._listen, daemon=True)
             self.thread.start()
             
-            logger.info(f"✓ DNS Interceptor listening on {BIND_IP}:{self.BIND_PORT}")
+            logger.info(f"✓ DNS Interceptor listening on {self.BIND_IP}:{self.BIND_PORT}")
             return True
             
         except PermissionError:

@@ -10,14 +10,14 @@ UPSTREAM_SERVERS = [
         "208.67.222.222" 
     ]
 
-DNS_PORT = 53
-TIMEOUT = 5
 
 class DNSResolver:
     
     def __init__(self):
         self.upstream_servers = UPSTREAM_SERVERS
-        
+        self.DNS_PORT = 53
+        self.TIMEOUT = 5
+
     def resolve(self, domain: str, query_type: str = "A") -> list[str]:
         for upstream in self.upstream_servers:
             try:
@@ -26,8 +26,8 @@ class DNSResolver:
                 query_packet = self._build_query(domain, query_type)
                 
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.settimeout(TIMEOUT)
-                sock.sendto(query_packet, (upstream, DNS_PORT))
+                sock.settimeout(self.TIMEOUT)
+                sock.sendto(query_packet, (upstream, self.DNS_PORT))
                 
                 response, _ = sock.recvfrom(512)
                 sock.close()
