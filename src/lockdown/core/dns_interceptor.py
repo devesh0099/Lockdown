@@ -15,7 +15,7 @@ class DNSInterceptor:
         self.whitelist_patterns = [re.compile(pattern) for pattern in whitelist_patterns]
         self.on_ip_resolved = on_ip_resolved
         self.resolver = DNSResolver()
-        
+
         self.sock = None
         self.running = False
         self.thread = None
@@ -23,12 +23,12 @@ class DNSInterceptor:
     def start(self) -> bool:
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.sock.bind((self.BIND_IP, self.BIND_PORT))
+            self.sock.bind((BIND_IP, self.BIND_PORT))
             self.running = True
             self.thread = threading.Thread(target=self._listen, daemon=True)
             self.thread.start()
             
-            logger.info(f"✓ DNS Interceptor listening on {self.BIND_IP}:{self.BIND_PORT}")
+            logger.info(f"✓ DNS Interceptor listening on {BIND_IP}:{self.BIND_PORT}")
             return True
             
         except PermissionError:

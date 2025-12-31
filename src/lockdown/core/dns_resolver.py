@@ -26,8 +26,8 @@ class DNSResolver:
                 query_packet = self._build_query(domain, query_type)
                 
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.settimeout(self.TIMEOUT)
-                sock.sendto(query_packet, (upstream, self.DNS_PORT))
+                sock.settimeout(TIMEOUT)
+                sock.sendto(query_packet, (upstream, DNS_PORT))
                 
                 response, _ = sock.recvfrom(512)
                 sock.close()
