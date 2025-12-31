@@ -20,6 +20,8 @@ class FirewallManager:
         if not self.backend.initialize():
             self.state_manager.restore_state()
             return False
+
+        return True
         
     def allow_ip(self, ip:str, port: int = 443, protocol:str = "tcp") -> bool:
         if not self.backend.is_active:

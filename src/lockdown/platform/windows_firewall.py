@@ -41,6 +41,7 @@ class WindowsFirewall:
             self.is_active = True
             logger.info("Firewall Activated")
             return True
+        
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to initialize firewall: {e}")
             logger.error(f"Command output: {e.output if hasattr(e, 'output') else 'N/A'}")
