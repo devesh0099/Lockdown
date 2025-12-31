@@ -21,14 +21,34 @@ class WindowsState:
         self._delete_lockdown_rules()
 
         original_policy = state.get("firewall_policy","allowinbound,allowoutbound")
-        subprocess.run(f"netsh advfirewall set allprofiles firewallpolicy {original_policy}",
+        logger.info(f"Restoring firewall policy to: {original_policy}")
+
+        result = subprocess.run(f"netsh advfirewall set allprofiles firewallpolicy {original_policy}",
                        shell=True,
                        check=True,
                        capture_output=True
                        )
-        logger.info("Restored the previous State of firewall.")
+        if result.returncode != 0:
+            logger.error(f"Failed to restore policy: {result.stderr}")
+            logger.warning("Attempting to force allow policy...")
+        
+            subprocess.run(
+                "netsh advfirewall set allprofiles firewallpolicy blockinbound,allowoutbound",
+                shell=True,
+                capture_output=True
+            )
+            logger.info("Forced allowoutbound policy")
+        else:
+            logger.info(f"Restored firewall policy: {original_policy}")
 
-        firewall_state = state.get("firewall_state", {})
+        current_policy = self._get_firewall_policy()
+        logger.info(f"Current policy after restore: {current_policy}")
+            
+        if "block" in current_policy.lower() and "outbound" in current_policy.lower():
+            logger.warning("⚠️  Outbound traffic is still blocked!")
+            logger.warning("   Manually run: netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound")
+
+        firewall_state = state.get("firewall_state", {}).get("enabled", True)
         if not firewall_state.get("enabled", True):
             subprocess.run(
                 "netsh advfirewall set allprofiles state off",
@@ -97,24 +117,31 @@ class WindowsState:
     
     def _delete_lockdown_rules(self):
         try:
+            logger.info("Deleting lockdown firewall rules...")
+            
             subprocess.run(
-                'netsh advfirewall firewall delete rule name=all dir=out',
+                'netsh advfirewall firewall delete rule name="CodeforcesLockdown_Loopback"',
                 shell=True,
-                capture_output=True,
-                text=True
+                capture_output=True
             )
             
-            for prefix in ["CodeforcesLockdown_", "CodeforcesLockdown"]:
-                try:
-                    subprocess.run(
-                        f'powershell -Command "Remove-NetFirewallRule -DisplayName \'{prefix}*\' -ErrorAction SilentlyContinue"',
-                        shell=True,
-                        capture_output=True,
-                        text=True,
-                        timeout=5
-                    )
-                except Exception:
-                    pass
+            powershell_cmd = (
+                'Get-NetFirewallRule | '
+                'Where-Object {$_.DisplayName -like "CodeforcesLockdown*"} | '
+                'Remove-NetFirewallRule'
+            )
+            
+            subprocess.run(
+                f'powershell -Command "{powershell_cmd}"',
+                shell=True,
+                capture_output=True,
+                timeout=10
+            )
+            
+            logger.info("Lockdown rules deleted")
                     
+        except subprocess.TimeoutExpired:
+            logger.warning("PowerShell deletion timed out")
         except Exception as e:
             logger.warning(f"Error during rule cleanup: {e}")
+
