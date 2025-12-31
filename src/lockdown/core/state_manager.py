@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
-from lockdown.platform.windows_state import WindowsState
+from platform.windows_state import WindowsState
 
 logger = logging.getLogger(__name__)
 

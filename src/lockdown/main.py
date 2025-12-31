@@ -2,7 +2,7 @@ import logging
 import sys
 import signal
 import atexit
-from lockdown.core.firewall_manager import FirewallManager
+from core.firewall_manager import FirewallManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,7 +18,7 @@ firewall = None
 
 def cleanup():
     if firewall and firewall.backend.is_active:
-        logger.info("\n🔧 Cleaning up...")
+        logger.info("\nCleaning up...")
         firewall.disable_lockdown()
 
 def signal_handler(signum, frame):
@@ -32,8 +32,6 @@ def test_lockdown():
     print("LOCKDOWN - TEST MODE")
     
     if not is_admin():
-        logger.error("This program requires Administrator privileges")
-        logger.error("Right-click and select 'Run as Administrator'")
         return False
     
     firewall = FirewallManager()
@@ -59,13 +57,11 @@ def test_lockdown():
     
     input("\n⏸Press Enter to disable lockdown and restore system...")
     
-    print("\n📍 Step 3: Restoring system...")
+    print("\nStep 3: Restoring system...")
     cleanup()
     
-    print("\n" + "=" * 60)
-    print("✅ TEST COMPLETE")
-    print("=" * 60)
-    print("\n💡 Your system has been restored to its original state")
+    print("TEST COMPLETE")
+    print("\nYour system has been restored to its original state")
     print("   You can verify by opening any website\n")
     
     return True

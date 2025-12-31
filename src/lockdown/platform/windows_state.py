@@ -12,7 +12,7 @@ class WindowsState:
             "existing_rules_count": self._count_existing_rules()
         }
         
-        logger.info(f"✓ Captured Windows state (Policy: {state['firewall_policy']})")
+        logger.info(f"Captured Windows state (Policy: {state['firewall_policy']})")
         return state
     
     def restore(self, state: dict) -> bool:
@@ -39,4 +39,80 @@ class WindowsState:
         logger.info("Previous Firewall Satte recovery successful.")
 
 
+    def _get_firewall_state(self) -> dict:
+        try:
+            result = subprocess.run(
+                "netsh advfirewall show allprofiles state",
+                shell=True,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            output = result.stdout.upper()
+            enabled = "ON" in output or "STATE" in output
+            
+            return {"enabled": enabled}
+            
+        except Exception as e:
+            logger.warning(f"Could not determine firewall state: {e}")
+            return {"enabled": True} 
     
+    def _get_firewall_policy(self) -> str:
+        try:
+            result = subprocess.run(
+                "netsh advfirewall show allprofiles",
+                shell=True,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            output = result.stdout.upper()
+
+            if "OUTBOUND" in output and "BLOCK" in output:
+                return "blockinbound,blockoutbound"
+            else:
+                return "allowinbound,allowoutbound"
+                
+        except Exception as e:
+            logger.warning(f"Could not determine firewall policy: {e}")
+            return "allowinbound,allowoutbound"
+    
+    def _count_existing_rules(self) -> int:
+        try:
+            result = subprocess.run(
+                "netsh advfirewall firewall show rule name=all",
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            
+            count = result.stdout.count("Rule Name:")
+            return count
+            
+        except Exception:
+            return 0
+    
+    def _delete_lockdown_rules(self):
+        try:
+            subprocess.run(
+                'netsh advfirewall firewall delete rule name=all dir=out',
+                shell=True,
+                capture_output=True,
+                stderr=subprocess.DEVNULL
+            )
+            
+            for prefix in ["CodeforcesLockdown_", "CodeforcesLockdown"]:
+                try:
+                    subprocess.run(
+                        f'powershell -Command "Remove-NetFirewallRule -DisplayName \'{prefix}*\' -ErrorAction SilentlyContinue"',
+                        shell=True,
+                        capture_output=True,
+                        timeout=5
+                    )
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            logger.warning(f"Error during rule cleanup: {e}")

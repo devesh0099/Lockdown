@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
-from lockdown.platform.windows_firewall import WindowsFirewall
-from lockdown.core.state_manager import StateManager
+from platform.windows_firewall import WindowsFirewall
+from core.state_manager import StateManager
 
 logger = logging.getLogger(__name__)
 
