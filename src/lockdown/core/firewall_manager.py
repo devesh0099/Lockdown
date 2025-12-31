@@ -4,6 +4,7 @@ from platform.windows_firewall import WindowsFirewall
 from core.state_manager import StateManager
 from core.dns_interceptor import DNSInterceptor 
 from platform.windows_dns import WindowsDNS
+from monitoring.interface_monitor import InterfaceMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ class FirewallManager:
         self.state_manager = StateManager()
         self.dns_interceptor = None
         self.dns_config = WindowsDNS()
+        self.interface_monitor = None
 
     def enable_lockdown(self, whitelist_domains: list = None) -> bool:
         logger.info("ENABLING NETWORK LOCKDOWN")
@@ -24,6 +26,13 @@ class FirewallManager:
             logger.error("Failed to capture system state, aborting")
             return False
         
+        self.interface_monitor = InterfaceMonitor(
+            on_new_interface=self._on_new_interface
+        )
+        
+        if not self.interface_monitor.start():
+            logger.warning("Interface monitor failed to start (non-critical)")
+
         self.dns_interceptor = DNSInterceptor(
             whitelist_patterns=whitelist_domains,
             on_ip_resolved=self._on_dns_resolved
@@ -31,6 +40,8 @@ class FirewallManager:
 
         if not self.dns_interceptor.start():
             logger.error("Failed to start DNS interceptor")
+            if self.interface_monitor:
+                self.interface_monitor.stop()
             self.state_manager.restore_state()
             return False
         
@@ -38,21 +49,34 @@ class FirewallManager:
             logger.error("Failed to configure DNS")
             self.dns_config.restore_dns_to_dhcp()
             self.dns_interceptor.stop()
+            if self.interface_monitor:
+                self.interface_monitor.stop()
             self.state_manager.restore_state()
             return False
 
         if not self.backend.initialize():
+            self.dns_config.restore_dns_to_dhcp()
+            self.dns_interceptor.stop()
+            if self.interface_monitor:
+                self.interface_monitor.stop()
             self.state_manager.restore_state()
             return False
         
         logger.info("LOCKDOWN ACTIVE WITH DNS FILTERING")
         logger.info(f"Allowed domains: {whitelist_domains}")
+        logger.info(f"   Interface Monitoring: {'Enabled' if self.interface_monitor else 'Disabled'}")
         return True
 
     def _on_dns_resolved(self, domain: str, ip: str):
         logger.info(f"Whitelisting {ip} for {domain}")
         self.backend.add_allow_rule(ip, port=443, protocol="tcp")
         self.backend.add_allow_rule(ip, port=80, protocol="tcp")
+
+    def _on_new_interface(self, interface_name: str):
+        logger.warning(f"NEW NETWORK INTERFACE DETECTED: {interface_name}")
+        logger.warning(f"Firewall rules automatically apply to this interface")
+        logger.warning(f"If this is USB tethering, it will be blocked")
+    
 
     def allow_ip(self, ip:str, port: int = 443, protocol:str = "tcp") -> bool:
         if not self.backend.is_active:
@@ -64,11 +88,12 @@ class FirewallManager:
     def revoke_ip(self, ip:str, port: int = 443, protocol: str = "tcp") -> bool:
         return self.backend.delete_rule_by_ip(ip, port, protocol)
     
-    def revoke_ip(self, ip: str, port: int = 443, protocol: str = "tcp") -> bool:
-        return self.backend.delete_rule_by_ip(ip, port, protocol)
-    
     def disable_lockdown(self) -> bool:
         logger.info("DISABLING LOCKDOWN")
+
+        if self.interface_monitor:
+            self.interface_monitor.stop()
+            
         if self.dns_interceptor:
             self.dns_interceptor.stop()
 

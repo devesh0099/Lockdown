@@ -79,7 +79,9 @@ class WindowsFirewall:
                 f'protocol={protocol.upper()} '
                 f'remoteip={ip} '
                 f'remoteport={port} '
-                f'profile=any'
+                f'profile=any '
+                f'interfacetype=any'
+
             )
 
             self.rules[rule_name] = {
@@ -88,7 +90,7 @@ class WindowsFirewall:
                 "protocol": protocol.upper()
             }
 
-            logger.info(f"Added {ip}:{port}/{protocol.upper()} to allowlist")
+            logger.info(f"Added {ip}:{port}/{protocol.upper()} on ALL interfaces")
             return rule_name
 
         except subprocess.CalledProcessError as e:
