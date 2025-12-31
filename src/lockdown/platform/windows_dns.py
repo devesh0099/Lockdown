@@ -11,6 +11,7 @@ class WindowsDNS:
             
             if not interfaces:
                 logger.error("No active network interfaces found")
+                self._debug_show_interfaces()
                 return False
             
             for interface in interfaces:
@@ -60,23 +61,64 @@ class WindowsDNS:
     def _get_active_interfaces(self) -> list:
         try:
             result = subprocess.run(
-                'netsh interface ipv4 show interfaces',
+                'powershell -Command "Get-NetAdapter | Where-Object {$_.Status -eq \'Up\'} | Select-Object -ExpandProperty Name"',
                 shell=True,
                 capture_output=True,
                 text=True,
                 check=True
             )
         
+            if result.returncode == 0 and result.stdout.strip():
+                interfaces = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+                logger.debug(f"Found interfaces via PowerShell: {interfaces}")
+                return interfaces
+            
+            result = subprocess.run(
+                'netsh interface ipv4 show interfaces',
+                shell=True,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
             interfaces = []
             for line in result.stdout.splitlines():
-                if "connected" in line.lower() and "dedicated" in line.lower():
+                line = line.strip()
+                
+                if not line or 'Idx' in line or '---' in line:
+                    continue
+                
+                if 'connected' in line.lower():
                     parts = line.split()
-                    if len(parts) >= 4:
-                        interface_name = ' '.join(parts[3:])
-                        interfaces.append(interface_name)
+                    if len(parts) >= 5:
+                        status_idx = -1
+                        for i, part in enumerate(parts):
+                            if 'connected' in part.lower():
+                                status_idx = i
+                                break
+                        
+                        if status_idx >= 0 and status_idx + 1 < len(parts):
+                            interface_name = ' '.join(parts[status_idx + 1:])
+                            interfaces.append(interface_name)
             
+            logger.debug(f"Found interfaces via netsh: {interfaces}")
             return interfaces
             
+        except subprocess.TimeoutExpired:
+            logger.error("PowerShell command timed out")
+            return []
         except Exception as e:
             logger.error(f"Error getting network interfaces: {e}")
             return []
+    
+    def _debug_show_interfaces(self):
+        try:
+            result = subprocess.run(
+                'netsh interface ipv4 show interfaces',
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            logger.error(result.stdout)
+        except Exception:
+            pass
