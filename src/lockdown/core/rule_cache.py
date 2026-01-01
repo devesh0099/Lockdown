@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class RuleCache:
-    def __init__(self, db_path: Optional[Path] = None, default_ttl: int = 300): # 300 seconds
+    def __init__(self, db_path: Optional[Path] = None, default_ttl: int = 1200): # 20 minutes or 1200 seconds
         if db_path is None:
             db_path = Path.home() / ".lockdown" / "rules.db"
         

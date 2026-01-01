@@ -1,10 +1,13 @@
 import logging
+import subprocess
 from platform.windows_firewall import WindowsFirewall
 from core.state_manager import StateManager
 from core.dns_interceptor import DNSInterceptor 
 from platform.windows_dns import WindowsDNS
 from monitoring.interface_monitor import InterfaceMonitor
 from core.rule_cache import RuleCache
+from monitoring.watchdog import FirewallWatchdog
+from security.state_flush import StateFlush
 
 
 logger = logging.getLogger(__name__)
@@ -17,8 +20,10 @@ class FirewallManager:
         self.dns_config = WindowsDNS()
         self.interface_monitor = None
         self.rule_cache = RuleCache(default_ttl=rule_ttl)
+        self.watchdog = None
 
-    def enable_lockdown(self, whitelist_domains: list = None) -> bool:
+
+    def enable_lockdown(self, whitelist_domains: list = None, flush_initial_state: bool = True) -> bool:
         logger.info("ENABLING NETWORK LOCKDOWN")
         
         if whitelist_domains is None:
@@ -27,6 +32,17 @@ class FirewallManager:
         if not self.state_manager.capture_state():
             logger.error("Failed to capture system state, aborting")
             return False
+        
+        if flush_initial_state:
+            if not StateFlush.flush_all_state():
+                logger.warning("Failed to flush initial state")
+            
+            StateFlush.flush_dns_cache()
+        
+        if not self.state_manager.capture_state():
+            return False
+        
+
         
         self.interface_monitor = InterfaceMonitor(
             on_new_interface=self._on_new_interface
@@ -68,15 +84,27 @@ class FirewallManager:
             logger.warning("Rule cleanup thread failed to start (non-critical)")
       
 
+        self.watchdog = FirewallWatchdog(
+            group_name=self.backend.GROUP_NAME,
+            on_tampering_detected=self._on_tampering_detected
+        )
+        
+        if not self.watchdog.start():
+            logger.warning("Watchdog failed to start (non-critical)")
+
         logger.info("LOCKDOWN ACTIVE WITH DNS FILTERING")
         logger.info(f"Allowed domains: {whitelist_domains}")
         logger.info(f"   Interface Monitoring: {'Enabled' if self.interface_monitor else 'Disabled'}")
         return True
-
+    
     def _on_dns_resolved(self, domain: str, ip: str):
         logger.info(f"Whitelisting {ip} for {domain}")
         rule_name_https = self.backend.add_allow_rule(ip, port=443, protocol="tcp")
         rule_name_http = self.backend.add_allow_rule(ip, port=80, protocol="tcp")
+        
+        self.watchdog.register_rule(rule_name_https)
+        self.watchdog.register_rule(rule_name_http)
+
         self.rule_cache.add_rule(
             rule_name=rule_name_https,
             ip=ip,
@@ -97,6 +125,8 @@ class FirewallManager:
 
     def _on_rule_expired(self, rule_name: str, ip: str, port: int, protocol: str):
             logger.info(f"Rule expired: {ip}:{port}/{protocol} - Removing from firewall")
+            if self.watchdog:
+                self.watchdog.unregister_rule(rule_name)
             self.backend.delete_rule_by_name(rule_name)
 
     def _on_new_interface(self, interface_name: str):
@@ -104,6 +134,75 @@ class FirewallManager:
         logger.warning(f"Firewall rules automatically apply to this interface")
         logger.warning(f"If this is USB tethering, it will be blocked")
     
+    def _on_tampering_detected(self, event_type: str, details: dict):
+        logger.error("SECURITY ALERT: FIREWALL TAMPERING DETECTED!")
+        logger.error(f"Type: {event_type}")
+        logger.error(f"Details: {details}")
+        logger.error("Administrator bypassing lockdown!")
+
+        if event_type == "rule_deleted":
+            self._reinstate_deleted_rule(details)
+        
+        elif event_type == "unauthorized_rule":
+            self._remove_unauthorized_rule(details)
+        
+        elif event_type == "event_log_change":
+            logger.error("Firewall modification detected via Event Log")
+            logger.error("Manual investigation recommended")
+
+    def _reinstate_deleted_rule(self, details: dict):
+        rule_name = details.get('rule_name', '')
+        
+        logger.error(f"ATTEMPTING TO REINSTATE RULE: {rule_name}")
+        
+        cached_rules = self.rule_cache.get_all_rules()
+        
+        for rule in cached_rules:
+            if rule['rule_name'] == rule_name:
+                logger.info(f"Re-adding: {rule['ip']}:{rule['port']}/{rule['protocol']}")
+                
+                new_rule_name = self.backend.add_allow_rule(
+                    ip=rule['ip'],
+                    port=rule['port'],
+                    protocol=rule['protocol'].lower()
+                )
+                
+                if new_rule_name:
+                    self.rule_cache.delete_rule(rule_name)
+                    self.rule_cache.add_rule(
+                        rule_name=new_rule_name,
+                        ip=rule['ip'],
+                        port=rule['port'],
+                        protocol=rule['protocol'],
+                        domain=rule.get('domain')
+                    )
+                    
+                    if self.watchdog:
+                        self.watchdog.register_rule(new_rule_name)
+                    
+                    logger.info(f"Rule reinstated successfully")
+                    return
+        
+        logger.error(f"Could not reinstate rule (not found in cache)")
+
+    def _remove_unauthorized_rule(self, details: dict):
+        rule_name = details.get('rule_name', '')
+        
+        logger.error(f"REMOVING UNAUTHORIZED RULE: {rule_name}")
+        
+        try:
+            subprocess.run(
+                f'netsh advfirewall firewall delete rule name="{rule_name}"',
+                shell=True,
+                capture_output=True,
+                check=True
+            )
+            
+            logger.info(f"Unauthorized rule removed")
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to remove rule: {e}")
+
 
     def allow_ip(self, ip:str, port: int = 443, protocol:str = "tcp") -> bool:
         if not self.backend.is_active:
@@ -132,6 +231,9 @@ class FirewallManager:
     
     def disable_lockdown(self) -> bool:
         logger.info("DISABLING LOCKDOWN")
+        
+        if self.watchdog:
+            self.watchdog.stop()
         
         self.rule_cache.stop_cleanup_thread()
         
