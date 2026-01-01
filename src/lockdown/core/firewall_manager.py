@@ -13,7 +13,7 @@ from security.state_flush import StateFlush
 logger = logging.getLogger(__name__)
 
 class FirewallManager:
-    def __init__(self, rule_ttl: int = 300):
+    def __init__(self, rule_ttl: int = 1200):
         self.backend = WindowsFirewall()
         self.state_manager = StateManager()
         self.dns_interceptor = None
@@ -41,8 +41,6 @@ class FirewallManager:
         
         if not self.state_manager.capture_state():
             return False
-        
-
         
         self.interface_monitor = InterfaceMonitor(
             on_new_interface=self._on_new_interface
@@ -94,7 +92,7 @@ class FirewallManager:
 
         logger.info("LOCKDOWN ACTIVE WITH DNS FILTERING")
         logger.info(f"Allowed domains: {whitelist_domains}")
-        logger.info(f"   Interface Monitoring: {'Enabled' if self.interface_monitor else 'Disabled'}")
+        logger.info(f"Interface Monitoring: {'Enabled' if self.interface_monitor else 'Disabled'}")
         return True
     
     def _on_dns_resolved(self, domain: str, ip: str):
@@ -155,35 +153,82 @@ class FirewallManager:
         
         logger.error(f"ATTEMPTING TO REINSTATE RULE: {rule_name}")
         
-        cached_rules = self.rule_cache.get_all_rules()
+        if rule_name not in self.backend.rules:
+            logger.error(f"Rule not found in registry (may be system rule)")
+            return
+    
+        rule_info = self.backend.rules[rule_name]
+        rule_type = rule_info.get('type')
         
-        for rule in cached_rules:
-            if rule['rule_name'] == rule_name:
-                logger.info(f"Re-adding: {rule['ip']}:{rule['port']}/{rule['protocol']}")
-                
-                new_rule_name = self.backend.add_allow_rule(
-                    ip=rule['ip'],
-                    port=rule['port'],
-                    protocol=rule['protocol'].lower()
+        if rule_type == 'loopback':
+            # Reinstate DNS rule
+            logger.info(f"Re-adding loopback rule")
+            try:
+                self.backend._run_netsh(
+                    f'advfirewall firewall add rule '
+                    f'name="{rule_name}" '
+                    f'dir=out '
+                    f'action=allow '
+                    f'remoteip=127.0.0.0/8 '
+                    f'profile=any'
+                )
+                logger.info(f"   ✓ Loopback rule reinstated")
+            except Exception as e:
+                logger.error(f"   ✗ Failed to reinstate: {e}")
+        
+        elif rule_type == 'upstream_dns':
+            # Reinstate DNS rule
+            dns_ip = rule_info.get('ip')
+            logger.info(f"Re-adding upstream DNS rule for {dns_ip}")
+            
+            try:
+                self.backend._run_netsh(
+                    f'advfirewall firewall add rule '
+                    f'name="{rule_name}" '
+                    f'dir=out '
+                    f'action=allow '
+                    f'protocol=UDP '
+                    f'remoteip={dns_ip} '
+                    f'remoteport=53 '
+                    f'profile=any'
+                )
+                logger.info(f"DNS rule reinstated")
+            except Exception as e:
+                logger.error(f"Failed to reinstate: {e}")
+        
+        else:
+            # Regular IP whitelist rule
+            ip = rule_info.get('ip')
+            port = rule_info.get('port')
+            protocol = rule_info.get('protocol')
+            
+            if not all([ip, port, protocol]):
+                logger.error(f"Incomplete rule info: {rule_info}")
+                return
+            
+            logger.info(f"   Re-adding: {ip}:{port}/{protocol}")
+            
+            try:
+                self.backend._run_netsh(
+                    f'advfirewall firewall add rule '
+                    f'name="{rule_name}" '
+                    f'dir=out '
+                    f'action=allow '
+                    f'protocol={protocol} '
+                    f'remoteip={ip} '
+                    f'remoteport={port} '
+                    f'profile=any '
+                    f'interfacetype=any'
                 )
                 
-                if new_rule_name:
-                    self.rule_cache.delete_rule(rule_name)
-                    self.rule_cache.add_rule(
-                        rule_name=new_rule_name,
-                        ip=rule['ip'],
-                        port=rule['port'],
-                        protocol=rule['protocol'],
-                        domain=rule.get('domain')
-                    )
-                    
-                    if self.watchdog:
-                        self.watchdog.register_rule(new_rule_name)
-                    
-                    logger.info(f"Rule reinstated successfully")
-                    return
-        
-        logger.error(f"Could not reinstate rule (not found in cache)")
+                # Re-register with watchdog
+                if self.watchdog:
+                    self.watchdog.register_rule(rule_name)
+                
+                logger.info(f"Rule reinstated successfully")
+                
+            except Exception as e:
+                logger.error(f"Failed to reinstate: {e}")
 
     def _remove_unauthorized_rule(self, details: dict):
         rule_name = details.get('rule_name', '')
