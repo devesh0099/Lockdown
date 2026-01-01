@@ -32,11 +32,23 @@ class WindowsFirewall:
                 f'name="{rule_name}" '
                 f'dir=out '
                 f'action=allow '
-                f'remoteip=127.0.0.1 '
+                f'remoteip=127.0.0.0/8 '
                 f'profile=any'
             )
             self.rules[rule_name] = {"type": "loopback", "ip": "127.0.0.1"}
-            logger.info("Allowed loopback")
+            logger.info("Allowed IPv4 loopback")
+
+            rule_name_ipv6 = f"{self.GROUP_NAME}_Loopback_IPv6"
+            self._run_netsh(
+                f'advfirewall firewall add rule '
+                f'name="{rule_name_ipv6}" '
+                f'dir=out '
+                f'action=allow '
+                f'remoteip=::1/128 '  
+                f'profile=any'
+            )
+            self.rules[rule_name] = {"type": "loopback", "ip": "::1"}
+
 
             # Allow DNS query for local DNS
             upstream_dns_servers = ["8.8.8.8", "1.1.1.1", "208.67.222.222"]

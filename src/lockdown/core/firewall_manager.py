@@ -1,20 +1,22 @@
 import logging
-from typing import Optional
 from platform.windows_firewall import WindowsFirewall
 from core.state_manager import StateManager
 from core.dns_interceptor import DNSInterceptor 
 from platform.windows_dns import WindowsDNS
 from monitoring.interface_monitor import InterfaceMonitor
+from core.rule_cache import RuleCache
+
 
 logger = logging.getLogger(__name__)
 
 class FirewallManager:
-    def __init__(self):
+    def __init__(self, rule_ttl: int = 300):
         self.backend = WindowsFirewall()
         self.state_manager = StateManager()
         self.dns_interceptor = None
         self.dns_config = WindowsDNS()
         self.interface_monitor = None
+        self.rule_cache = RuleCache(default_ttl=rule_ttl)
 
     def enable_lockdown(self, whitelist_domains: list = None) -> bool:
         logger.info("ENABLING NETWORK LOCKDOWN")
@@ -62,6 +64,10 @@ class FirewallManager:
             self.state_manager.restore_state()
             return False
         
+        if not self.rule_cache.start_cleanup_thread(on_rule_expired=self._on_rule_expired):
+            logger.warning("Rule cleanup thread failed to start (non-critical)")
+      
+
         logger.info("LOCKDOWN ACTIVE WITH DNS FILTERING")
         logger.info(f"Allowed domains: {whitelist_domains}")
         logger.info(f"   Interface Monitoring: {'Enabled' if self.interface_monitor else 'Disabled'}")
@@ -69,8 +75,29 @@ class FirewallManager:
 
     def _on_dns_resolved(self, domain: str, ip: str):
         logger.info(f"Whitelisting {ip} for {domain}")
-        self.backend.add_allow_rule(ip, port=443, protocol="tcp")
-        self.backend.add_allow_rule(ip, port=80, protocol="tcp")
+        rule_name_https = self.backend.add_allow_rule(ip, port=443, protocol="tcp")
+        rule_name_http = self.backend.add_allow_rule(ip, port=80, protocol="tcp")
+        self.rule_cache.add_rule(
+            rule_name=rule_name_https,
+            ip=ip,
+            port=443,
+            protocol="TCP",
+            domain=domain,
+            ttl=self.rule_cache.default_ttl
+        )
+
+        self.rule_cache.add_rule(
+            rule_name=rule_name_http,
+            ip=ip,
+            port=80,
+            protocol="TCP",
+            domain=domain,
+            ttl=self.rule_cache.default_ttl
+        )
+
+    def _on_rule_expired(self, rule_name: str, ip: str, port: int, protocol: str):
+            logger.info(f"Rule expired: {ip}:{port}/{protocol} - Removing from firewall")
+            self.backend.delete_rule_by_name(rule_name)
 
     def _on_new_interface(self, interface_name: str):
         logger.warning(f"NEW NETWORK INTERFACE DETECTED: {interface_name}")
@@ -83,13 +110,32 @@ class FirewallManager:
             return False
 
         rule_name = self.backend.add_allow_rule(ip, port, protocol)
-        return rule_name is not None
+        if rule_name:
+            self.rule_cache.add_rule(
+                rule_name=rule_name,
+                ip=ip,
+                port=port,
+                protocol=protocol.upper(),
+                ttl=None
+            )
+            return True
+        return False
     
     def revoke_ip(self, ip:str, port: int = 443, protocol: str = "tcp") -> bool:
-        return self.backend.delete_rule_by_ip(ip, port, protocol)
+        success = self.backend.delete_rule_by_ip(ip, port, protocol)
+        
+        if success:
+            rule_name = f"{self.backend.GROUP_NAME}_{ip.replace('.', '_')}_{port}_{protocol.upper()}"
+            self.rule_cache.delete_rule(rule_name)
+        
+        return success
     
     def disable_lockdown(self) -> bool:
         logger.info("DISABLING LOCKDOWN")
+        
+        self.rule_cache.stop_cleanup_thread()
+        
+        self.rule_cache.clear_all()
 
         if self.interface_monitor:
             self.interface_monitor.stop()
@@ -108,26 +154,33 @@ class FirewallManager:
         return success
     
     def get_whitelisted_ips(self) -> list:
-        rules = self.backend.get_active_rules()
-        result = []
+        cached_rules = self.rule_cache.get_all_rules()
         
-        for r in rules:
-            if r.get('type') in ['loopback', 'upstream_dns']:
-                continue
+        result = []
+        for rule in cached_rules:
+            time_left = rule['time_left_seconds']
+            minutes_left = time_left // 60
+            seconds_left = time_left % 60
             
-            ip = r.get('ip', 'unknown')
-            port = r.get('port', '?')
-            protocol = r.get('protocol', 'TCP')
-            
-            result.append(f"{ip}:{port}/{protocol}")
+            domain_info = f" ({rule['domain']})" if rule['domain'] else ""
+            result.append(
+                f"{rule['ip']}:{rule['port']}/{rule['protocol']}{domain_info} "
+                f"[expires in {minutes_left}m {seconds_left}s]"
+            )
         
         return result
-
+    
+    def get_cache_stats(self) -> dict:
+        return self.rule_cache.get_stats()
     
     def status(self) -> dict:
+        cache_stats = self.get_cache_stats()
+
         return {
             "active": self.backend.is_active,
             "dns_interceptor": self.dns_interceptor is not None and self.dns_interceptor.running,
+            "interface_monitor": self.interface_monitor is not None and self.interface_monitor.running,
+            "rule_ttl": self.rule_cache.default_ttl,
             "whitelisted_ips": self.get_whitelisted_ips(),
-            "rule_count": len(self.backend.rules)
+            "cache_stats": cache_stats
         }
