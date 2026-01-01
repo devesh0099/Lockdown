@@ -28,11 +28,11 @@ class DNSInterceptor:
             self.thread = threading.Thread(target=self._listen, daemon=True)
             self.thread.start()
             
-            logger.info(f"✓ DNS Interceptor listening on {self.BIND_IP}:{self.BIND_PORT}")
+            logger.info(f"DNS Interceptor listening on {self.BIND_IP}:{self.BIND_PORT}")
             return True
             
         except PermissionError:
-            logger.error("Permission denied Run as Administrator")
+            logger.error("Permission denied, Run as Administrator")
             return False
         except OSError as e:
             logger.error(f"Failed to bind port 53: {e}")

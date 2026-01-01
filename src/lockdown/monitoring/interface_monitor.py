@@ -44,7 +44,6 @@ class InterfaceMonitor:
                 if new_interfaces:
                     for interface in new_interfaces:
                         logger.warning(f"NEW INTERFACE DETECTED: {interface}")
-                        logger.warning(f"This could be USB tethering, VPN, or Bluetooth")
                         
                         if self.on_new_interface:
                             self.on_new_interface(interface)

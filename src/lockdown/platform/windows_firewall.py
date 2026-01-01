@@ -53,7 +53,7 @@ class WindowsFirewall:
                     f'profile=any'
                 )
                 self.rules[rule_name_dns] = {"type": "upstream_dns", "ip": dns_ip, "port": 53}
-                logger.info(f"✓ Allowed DNS queries to {dns_ip}")
+                logger.info(f"Allowed DNS queries to {dns_ip}")
 
             self.is_active = True
             logger.info("Firewall Activated")

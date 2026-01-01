@@ -40,7 +40,7 @@ class StateFlush:
             )
             
             if result.returncode == 0:
-                logger.info("✓ DNS cache flushed")
+                logger.info("DNS cache flushed")
                 return True
             else:
                 logger.warning(f"Failed to flush DNS cache: {result.stderr}")
@@ -117,7 +117,7 @@ class StateFlush:
                     if '[' in local_ip or '[' in remote_ip:
                         continue
                     
-                    logger.info(f"  Closing: {local_ip}:{local_port} → {remote_ip}:{remote_port}")
+                    logger.info(f"Closing: {local_ip}:{local_port} → {remote_ip}:{remote_port}")
                     
                     ps_command = (
                         f'Get-NetTCPConnection -LocalAddress {local_ip} -LocalPort {local_port} '
@@ -160,9 +160,9 @@ class StateFlush:
                     terminated += 1
                     
                 except subprocess.TimeoutExpired:
-                    logger.warning(f"  Timeout closing connection")
+                    logger.warning(f"Timeout closing connection")
                 except Exception as e:
-                    logger.warning(f"  Error closing connection: {e}")
+                    logger.warning(f"Error closing connection: {e}")
             
             logger.info(f"Attempted to close {terminated} connection(s)")
             logger.info("Note: Connections will naturally terminate when firewall blocks them")
@@ -186,7 +186,7 @@ class StateFlush:
             )
             
             if result.returncode == 0 or "Ok" in result.stdout:
-                logger.info("✓ ARP cache flushed")
+                logger.info("ARP cache flushed")
                 return True
             else:
                 logger.warning(f"Failed to flush ARP cache: {result.stderr}")

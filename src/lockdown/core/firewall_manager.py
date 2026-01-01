@@ -130,7 +130,6 @@ class FirewallManager:
     def _on_new_interface(self, interface_name: str):
         logger.warning(f"NEW NETWORK INTERFACE DETECTED: {interface_name}")
         logger.warning(f"Firewall rules automatically apply to this interface")
-        logger.warning(f"If this is USB tethering, it will be blocked")
     
     def _on_tampering_detected(self, event_type: str, details: dict):
         logger.error("SECURITY ALERT: FIREWALL TAMPERING DETECTED!")
@@ -146,7 +145,7 @@ class FirewallManager:
         
         elif event_type == "event_log_change":
             logger.error("Firewall modification detected via Event Log")
-            logger.error("Manual investigation recommended")
+            logger.error("Investigation recommended")
 
     def _reinstate_deleted_rule(self, details: dict):
         rule_name = details.get('rule_name', '')
@@ -172,9 +171,9 @@ class FirewallManager:
                     f'remoteip=127.0.0.0/8 '
                     f'profile=any'
                 )
-                logger.info(f"   ✓ Loopback rule reinstated")
+                logger.info(f"Loopback rule reinstated")
             except Exception as e:
-                logger.error(f"   ✗ Failed to reinstate: {e}")
+                logger.error(f"Failed to reinstate: {e}")
         
         elif rule_type == 'upstream_dns':
             # Reinstate DNS rule
@@ -206,7 +205,7 @@ class FirewallManager:
                 logger.error(f"Incomplete rule info: {rule_info}")
                 return
             
-            logger.info(f"   Re-adding: {ip}:{port}/{protocol}")
+            logger.info(f"Re-adding: {ip}:{port}/{protocol}")
             
             try:
                 self.backend._run_netsh(

@@ -105,8 +105,8 @@ class FirewallWatchdog:
             
             for rule_name in list(self.expected_rules):
                 if f'Rule Name:                            {rule_name}' not in output:
-                    logger.error(f"🚨 TAMPERING DETECTED: Rule deleted by external process!")
-                    logger.error(f"   Deleted rule: {rule_name}")
+                    logger.error(f"TAMPERING DETECTED: Rule deleted by external process!")
+                    logger.error(f"Deleted rule: {rule_name}")
                     
                     if self.on_tampering_detected:
                         self.on_tampering_detected("rule_deleted", {"rule_name": rule_name})

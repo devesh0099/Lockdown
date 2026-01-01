@@ -168,7 +168,7 @@ class RuleCache:
             conn.commit()
             conn.close()
             
-            logger.info("✓ Rule cache cleared")
+            logger.info("Rule cache cleared")
             return True
             
         except Exception as e:

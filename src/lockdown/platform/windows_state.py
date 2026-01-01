@@ -88,8 +88,8 @@ class WindowsState:
             else:
                 logger.error("Failed to restore policy after 3 attempts")
                 logger.error("MANUAL FIX REQUIRED:")
-                logger.error("  Open PowerShell as Admin and run:")
-                logger.error("  netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound")
+                logger.error("Open PowerShell as Admin and run:")
+                logger.error("netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound")
                 return False
             
             firewall_state = state.get("firewall_enabled", {})
